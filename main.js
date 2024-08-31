@@ -83,20 +83,22 @@ const enemySelection = () => {
 
 const calculateEnemyAttack = (enemy) => {
     const rand = randomIntFromInterval(0, 1);
-    const count = 0;
-    for (const attackKey in enemy.attacks) {
+    let count = 0;
+    for (const attackKey in enemy.actions) {
         if (rand == count) {
             return attackKey;
         }
+        count++;
     }
 }
 
 const playerAttackAction = async (player, enemy) => {
+    await wait(2000);
     console.log("Select your attack (type out the attack exactly): ")
-    for (const attackKey in player.attacks) {
-        console.log(`  [${attackKey}] damage:${player.attacks[attackKey]}`)
+    for (const attackKey in player.actions) {
+        console.log(`  [${attackKey}] damage:${player.actions[attackKey].damage}`)
     }
-    const playerSelection = await askQuestion();
+    const playerSelection = await askQuestion("");
     const playerAttack = player.actions[playerSelection];
     if (!playerAttack) {
         console.log("Invalid attack selected. You forego your turn.")
@@ -120,9 +122,10 @@ const playerAttackAction = async (player, enemy) => {
     }
 }
 
-const enemyAttackAction = async (enemy) => {
+const enemyAttackAction = async (enemy, player) => {
+    await wait(2000);
     const enemySelection = calculateEnemyAttack(enemy);
-    const enemyAttack = enemy.attack[enemySelection];
+    const enemyAttack = enemy.actions[enemySelection];
     const enemyDamage = randomIntFromInterval(0, enemyAttack.damage);
     console.log(`Your enemy attacks with ${enemySelection}...`);
     await wait(2000);
@@ -135,7 +138,7 @@ const enemyAttackAction = async (enemy) => {
     if (enemyAttack.effect) {
         applyStatusEffect(player, enemyAttack.effect);
         if (player.effect) {
-            console.log(`You have been affected status effect: ${enemy.effect.status}`);
+            console.log(`You have been affected status effect: ${player.effect.status}`);
         }
     }
 }
@@ -144,6 +147,7 @@ const applyStatusEffect = (target, status) => {
 
     const applyChance = randomIntFromInterval(0, 1);
     if (applyChance === 0) {
+        console.log(`${target.name} avoided status effect: ${status}`)
         return;
     }
 
@@ -204,6 +208,7 @@ const applyStatusEffect = (target, status) => {
 const calculateStatusEffects = (target) => {
     if (!target.effect) return;
 
+    target.effect.duration -= 1;
     if (target.effect.duration === 0) {
         delete target.effect;
         return;
@@ -241,7 +246,7 @@ const combatLoop = async () => {
         if (enemy.effect && enemy.effect.stunned) {
             console.log(`${enemy.name} is stunned and cannot attack!`);
         } else {
-            enemyAttackAction(enemy, player);
+            await enemyAttackAction(enemy, player);
         }
     }
 
@@ -277,7 +282,11 @@ const mainLoop = async () => {
 
 }
 
-const wait = t => new Promise((resolve, reject) => setTimeout(resolve, t));
+const wait = t => new Promise((resolve, reject) => {
+    console.log("");
+    console.log("");
+    setTimeout(resolve, t);
+});
 
 const askQuestion = (query) => {
     const rl = readline.createInterface({

@@ -2,7 +2,7 @@ const readline = require("readline")
 
 let playerName;
 let playerClass;
-let enemyName = "Your Enemy";
+let enemyName = "Your enemy";
 
 const classArray = ["", "Warrior", "Sorcerer", "Ranger"]
 
@@ -13,7 +13,8 @@ const createWarrior = (name) => {
         actions: {
             "sword slash": { damage: 2, effect: "bleed" },
             "shield bash": { damage: 2, effect: "stagger" },
-        }
+        },
+        effects: []
     }
 }
 
@@ -24,7 +25,8 @@ const createSorcerer = (name) => {
         actions: {
             "cast fireball": { damage: 3, effect: "burn" },
             "cast icebolt": { damage: 3, effect: "freeze" }
-        }
+        },
+        effects: []
     }
 }
 
@@ -35,7 +37,8 @@ const createRanger = (name) => {
         actions: {
             "set trap": { damage: 2, effect: "trap" },
             "poison arrow": { damage: 3, effect: "poison" }
-        }
+        },
+        effects: []
     }
 }
 
@@ -48,7 +51,7 @@ const getClass = (selection, name) => {
 }
 
 const intro = async () => {
-    playerName = await askQuestion("Greetings traveler! Please enter your name: ");
+    playerName = await getUserInput("Greetings traveler! Please enter your name: ");
     console.log(`Hello ${playerName}!`);
 }
 
@@ -59,7 +62,7 @@ const classSelection = async () => {
     console.log("  3. Ranger")
 
     while (true) {
-        const selection = await askQuestion("")
+        const selection = await getUserInput("")
         playerClass = parseInt(selection)
         if (playerClass === NaN) {
             console.log("Please enter a value of 1, 2, or 3")
@@ -72,7 +75,7 @@ const classSelection = async () => {
         break
     }
 
-    console.log(`You have selected the ${classArray[playerClass]} class`)
+    console.log(`${playerName} has selected the ${classArray[playerClass]} class`)
 }
 
 const enemySelection = () => {
@@ -92,53 +95,53 @@ const calculateEnemyAttack = (enemy) => {
     }
 }
 
-const playerAttackAction = async (player, enemy) => {
+const playerAction = async (player, enemy) => {
     await wait(2000);
     console.log("Select your attack (type out the attack exactly): ")
     for (const attackKey in player.actions) {
-        console.log(`  [${attackKey}] damage:${player.actions[attackKey].damage}`)
+        console.log(`  [${attackKey}] damage: up to ${player.actions[attackKey].damage}`)
     }
-    const playerSelection = await askQuestion("");
+    const playerSelection = await getUserInput("");
     const playerAttack = player.actions[playerSelection];
     if (!playerAttack) {
-        console.log("Invalid attack selected. You forego your turn.")
-        playerAttack = { damage: 0, effect: "none" }
+        console.log(`Invalid attack selected. ${player.name} hesitates and ${enemy.name} takes advantage of the opportunity.`)
+        return
     }
     const playerDamage = randomIntFromInterval(0, playerAttack.damage);
-    console.log(`You attack with ${playerSelection}...`);
+    console.log(`${player.name} attacks with ${playerSelection}...`);
     await wait(2000);
     if (playerDamage === 0) {
-        console.log("Your attack missed!");
+        console.log(`${player.name}'s attack missed!`);
         return;
     }
 
     enemy.life -= playerDamage;
-    console.log(`You hit your enemy for ${playerDamage}, bringing their life down to ${enemy.life}`);
+    console.log(`${player.name} hits ${enemy.name} for ${playerDamage}, bringing their life down to ${enemy.life}`);
     if (playerAttack.effect) {
         applyStatusEffect(enemy, playerAttack.effect);
-        if (enemy.effect) {
-            console.log(`Enemy has been affected status effect: ${enemy.effect.status}`);
+        if (enemy.effects?.some(x => x.status === playerAttack.effect)) {
+            console.log(`${enemy.name} has been affected by a new status effect: ${playerAttack.effect}`);
         }
     }
 }
 
-const enemyAttackAction = async (enemy, player) => {
+const enemyAction = async (enemy, player) => {
     await wait(2000);
     const enemySelection = calculateEnemyAttack(enemy);
     const enemyAttack = enemy.actions[enemySelection];
     const enemyDamage = randomIntFromInterval(0, enemyAttack.damage);
-    console.log(`Your enemy attacks with ${enemySelection}...`);
+    console.log(`${enemy.name} attacks with ${enemySelection}...`);
     await wait(2000);
     if (enemyDamage === 0) {
-        console.log("Your enemy attack misses! You got lucky!");
+        console.log(`${enemy.name} attack misses! ${player.name} got lucky!`);
         return;
     }
     player.life -= enemyDamage;
-    console.log(`Your enemy hits you for ${enemyDamage}, bringing your life down to ${player.life}`);
+    console.log(`${enemy.name} hits ${player.name} for ${enemyDamage}, bringing ${player.name}'s life down to ${player.life}`);
     if (enemyAttack.effect) {
         applyStatusEffect(player, enemyAttack.effect);
-        if (player.effect) {
-            console.log(`You have been affected status effect: ${player.effect.status}`);
+        if (player.effects?.some(x => x.status === enemyAttack.effect)) {
+            console.log(`${enemy.name} has been affected by a new status effect: ${enemyAttack.effect}`);
         }
     }
 }
@@ -151,53 +154,67 @@ const applyStatusEffect = (target, status) => {
         return;
     }
 
+    if (!target.effects) target.effects = []
+
     switch (status) {
         case "bleed":
-            target.effect = {
-                status: "bleeding",
-                damage: 1,
-                stunned: false,
-                duration: 2
+            if (!target.effects.some(x => x.status === "bleed")) {
+                target.effects.push({
+                    status: "bleed",
+                    damage: 1,
+                    stunned: false,
+                    expirationTurn: target.turnCounter + 2
+                })
             }
             break;
         case "stagger":
-            target.effect = {
-                status: "staggered",
-                damage: 0,
-                stunned: true,
-                duration: 1
+            if (!target.effects.some(x => x.status === "stagger")) {
+                target.effects.push({
+                    status: "stagger",
+                    damage: 0,
+                    stunned: true,
+                    expirationTurn: target.turnCounter + 1
+                })
             }
             break;
         case "burn":
-            target.effect = {
-                status: "burning",
-                damage: 1,
-                stunned: false,
-                duration: 2
+            if (!target.effects.some(x => x.status === "burn")) {
+                target.effects.push({
+                    status: "burn",
+                    damage: 1,
+                    stunned: false,
+                    expirationTurn: target.turnCounter + 2
+                })
             }
             break;
         case "freeze":
-            target.effect = {
-                status: "frozen",
-                damage: 0,
-                stunned: true,
-                duration: 2
+            if (!target.effects.some(x => x.status === "freeze")) {
+                target.effects.push({
+                    status: "freeze",
+                    damage: 0,
+                    stunned: true,
+                    expirationTurn: target.turnCounter + 2
+                })
             }
             break;
         case "trap":
-            target.effect = {
-                status: "bleeding",
-                damage: 1,
-                stunned: true,
-                duration: 2
+            if (!target.effects.some(x => x.status === "trap")) {
+                target.effects.push({
+                    status: "trap",
+                    damage: 1,
+                    stunned: true,
+                    expirationTurn: target.turnCounter + 2
+                })
             }
             break;
         case "poison":
-            target.effect = {
-                status: "poisoned",
-                damage: 2,
-                stunned: false,
-                duration: 2
+            if (!target.effects.some(x => x.status === "poison")) {
+                target.effects.push({
+                    status: "poison",
+                    damage: 2,
+                    stunned: false,
+                    expirationTurn: target.turnCounter + 2
+                })
             }
             break;
         default:
@@ -205,19 +222,30 @@ const applyStatusEffect = (target, status) => {
     }
 }
 
-const calculateStatusEffects = (target) => {
-    if (!target.effect) return;
+const calculateStatusEffectsForTurn = (target) => {
+    if (!target.effects) return;
 
-    target.effect.duration -= 1;
-    if (target.effect.duration === 0) {
-        delete target.effect;
-        return;
+    for (const effect of target.effects) {
+        if (effect.damage > 0) {
+            target.life -= effect.damage;
+            console.log(`${target.name} has been damaged by status: ${effect.status} for -${effect.damage}`);
+            console.log(`${target.name} life total: ${target.life}`)
+            if (target.life < 1) return;
+        }
     }
+}
 
-    if (target.effect.damage > 0) {
-        target.life -= target.effect.damage;
-        console.log(`${target.name} has been damaged by status: ${target.effect.status} for -${target.effect.damage}`);
-        console.log(`${target.name} life total: ${target.life}`)
+const applyDurationToEffects = (target) => {
+    if (!target.effects) return;
+
+    let i = target.effects.length;
+    while (i--) {
+        const effect = target.effects[i];
+        if (target.turnCounter === effect.expirationTurn) {
+            console.log(`${target.name} is no longer affected by the status effect ${effect.status}`)
+            target.effects.splice(i, 1);
+            continue;
+        }
     }
 }
 
@@ -228,31 +256,37 @@ const combatLoop = async () => {
 
     await wait(2000);
 
-    console.log(`${enemyName} is preparing to attack, what will you do?`)
+    console.log(`${enemyName} is preparing to attack, what will ${player.name} do?`)
+
+    player.turnCounter = 1;
+    enemy.turnCounter = 1;
 
     while (!(player.life < 1) && !(enemy.life < 1)) {
 
-        calculateStatusEffects(player);
+        calculateStatusEffectsForTurn(player);
         if (player.life < 1) break;
-        calculateStatusEffects(enemy);
-        if (enemy.life < 1) break;
-
-        if (player.effect && player.effect.stunned) {
-            console.log("You are stunned and cannot attack!");
+        if (player.effects?.some(x => x.stunned === true)) {
+            console.log(`${player.name} is stunned and cannot attack!`);
         } else {
-            await playerAttackAction(player, enemy);
+            await playerAction(player, enemy);
         }
+        player.turnCounter++
+        applyDurationToEffects(player);
 
-        if (enemy.effect && enemy.effect.stunned) {
+        calculateStatusEffectsForTurn(enemy);
+        if (enemy.life < 1) break;
+        if (enemy.effects?.some(x => x.stunned === true)) {
             console.log(`${enemy.name} is stunned and cannot attack!`);
         } else {
-            await enemyAttackAction(enemy, player);
+            await enemyAction(enemy, player);
         }
+        enemy.turnCounter++
+        applyDurationToEffects(enemy);
     }
 
     if (player.life <= 0) {
-        console.log("You have died. Better luck next time...");
-        const continueResponse = await askQuestion("Do you wish to try again? [yes/no]: ");
+        console.log(`${player.name} has died. Better luck next time...`);
+        const continueResponse = await getUserInput("Do you wish to try again? [yes/no]: ");
         if (continueResponse !== "yes") {
             console.log(`Until next time, ${playerName}!`);
             process.exit();
@@ -261,8 +295,8 @@ const combatLoop = async () => {
     }
 
     if (enemy.life <= 0) {
-        console.log(`You have slain ${enemy.name}. May they rest in peace...`);
-        const continueResponse = await askQuestion("Do you wish to continue? [yes/no]: ");
+        console.log(`${player.name} have slain ${enemy.name}. May they rest in peace...`);
+        const continueResponse = await getUserInput("Do you wish to continue? [yes/no]: ");
         if (continueResponse !== "yes") {
             console.log(`Until next time, ${playerName}!`);
             process.exit();
@@ -279,7 +313,6 @@ const mainLoop = async () => {
         await classSelection();
         await combatLoop();
     }
-
 }
 
 const wait = t => new Promise((resolve, reject) => {
@@ -288,7 +321,7 @@ const wait = t => new Promise((resolve, reject) => {
     setTimeout(resolve, t);
 });
 
-const askQuestion = (query) => {
+const getUserInput = (query) => {
     const rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
